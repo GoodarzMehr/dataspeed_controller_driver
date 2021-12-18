@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>dataspeed_ulc_can</name>
+  <version>0.0.5</version>
+  <description>
+    Package to translate ROS messages to and from CAN messages to interact with the Universal Lat/Lon Controller (ULC) firmware for CARMA
+  </description>
+
+  <license>BSD</license>
+  <author email="mradovnikovich@dataspeedinc.com">Micho Radovnikovich</author>
+  <maintainer email="goodarzm@vt.edu">Goodarz Mehr</maintainer>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <buildtool_depend condition="$ROS_PYTHON_VERSION == 2">python-setuptools</buildtool_depend>
+  <buildtool_depend condition="$ROS_PYTHON_VERSION == 3">python3-setuptools</buildtool_depend>
+
+  <depend>roscpp</depend>
+  <depend>rospy</depend>
+  <depend>nodelet</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>can_msgs</depend>
+  <depend>dataspeed_ulc_msgs</depend>
+  <depend>cav_msgs</depend>
+  <depend>autoware_msgs</depend>
+
+  <test_depend>roslib</test_depend> <!-- Needed for ROS_DISTRO environment variable -->
+  <test_depend>rostest</test_depend>
+
+  <export>
+    <nodelet plugin="${prefix}/nodelets.xml" />
+  </export>
+</package>
