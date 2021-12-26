@@ -12,9 +12,9 @@ Input command for the ULC. In addition to the speed and steering command inputs,
 
 Simplified interface to the ULC. When messages on this topic are used to command the ULC:
 
-  - The speed component of the ULC is activated and tracks the `linear.x` field of the `geometry_msgs/Twist` message, assuming the units are m/s
-  - The steering component of the ULC is activated in yaw rate mode and tracks the `angular.z` field of the `geometry_msgs/Twist` message, assuming the units are rad/s
-  - All longitudinal and lateral acceleration limits use the default settings outlined in the ULC User's Guide
+  - The speed component of the ULC is activated and tracks the `linear.x` field of the `geometry_msgs/Twist` message, assuming the units are m/s;
+  - The steering component of the ULC is activated in yaw rate mode and tracks the `angular.z` field of the `geometry_msgs/Twist` message, assuming the units are rad/s;
+  - All longitudinal and lateral acceleration limits use the default settings outlined in the [ULC User's Guide](https://bitbucket.org/DataspeedInc/dataspeed_ulc_ros/downloads/ULC_UserGuide-RevA04.pdf).
 
 #### cmd_vel_stamped ([geometry_msgs/TwistStamped](http://docs.ros.org/api/geometry_msgs/html/msg/TwistStamped.html))
 
