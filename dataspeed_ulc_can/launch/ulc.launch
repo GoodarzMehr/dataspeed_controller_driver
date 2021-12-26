@@ -2,10 +2,12 @@
   
   <arg name="can_ns" default="/can_bus_dbw" />
   <arg name="carma_ns" default="/hardware_interface"/>
+  <arg name="dbw_ns" default="/vehicle"/>
   <node pkg="dataspeed_ulc_can" type="ulc_node" name="ulc_node">
     <remap from="discovery" to="$(arg carma_ns)/driver_discovery"/>
     <remap from="robot_status" to="$(arg carma_ns)/controller/robot_status"/>
     <remap from="vehicle_cmd" to="$(arg carma_ns)/vehicle_cmd"/>
+    <remap from="dbw_enabled" to="$(arg dbw_ns)/dbw_enabled"/>
     <remap from="can_rx" to="$(arg can_ns)/can_rx"/>
     <remap from="can_tx" to="$(arg can_ns)/can_tx"/>
   </node>

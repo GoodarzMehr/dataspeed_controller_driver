@@ -1,7 +1,7 @@
-Dataspeed Universal Lat/Lon Controller Driver for CARMA
+Dataspeed Universal Lat/Lon Controller (ULC) Driver for CARMA
 =======================================================
 
-This is a fork of the [dataspeed_ulc_ros](https://bitbucket.org/DataspeedInc/dataspeed_ulc_ros/src/master/) package that is used to communicate with the Universal Lat/Lon Controller (ULC) feature of the [Dataspeed Drive-by-Wire Kit](https://www.dataspeedinc.com/adas-by-wire-system/) for Lincoln MKZ / Ford Fusion vehicles. This fork has been modified to allow for building a Docker image that can serve as a controller driver for the [CARMA Platform](https://github.com/usdot-fhwa-stol/carma-platform).
+This is a fork of the [dataspeed_ulc_ros](https://bitbucket.org/DataspeedInc/dataspeed_ulc_ros/src/master/) package that is used to communicate with the Universal Lat/Lon Controller (ULC) feature of the [Dataspeed Drive-by-Wire Kit](https://www.dataspeedinc.com/adas-by-wire-system/) for Lincoln MKZ / Ford Fusion vehicles. It may also work for other vehicles compatible with the [Dataspeed Drive-by-Wire Kit](https://www.dataspeedinc.com/adas-by-wire-system/), though this is not guaranteed. This fork has been modified to allow for building a Docker image that can serve as a controller driver for the [CARMA Platform](https://github.com/usdot-fhwa-stol/carma-platform).
 
 Ubuntu 20.04 Installation
 -------------------------
@@ -36,31 +36,40 @@ Finally, add the following lines to the `drivers.launch` file in the same direct
 <include if="$(arg dataspeed_controller)" file="$(find dataspeed_ulc_can)/launch/ulc.launch">
 </include>
 ```
+Note that for this driver to function it has to be launched concurrently with [dataspeed_can_driver](https://github.com/VT-ASIM-LAB/dataspeed_can_driver) to communicate with the [CAN bus](https://en.wikipedia.org/wiki/CAN_bus).
 
-ROS API (stable)
-----------------
+ROS API
+-------
 
 ### dataspeed_ulc_can
 
 #### Nodes
 * `ulc_node`
 
-#### Topics
-* ``: .
-* ``: .
-* `/discovery`: publishes the CARMA [DriverStatus](https://github.com/usdot-fhwa-stol/carma-msgs/blob/develop/cav_msgs/msg/DriverStatus.msg) message.
+#### Published Topics
+* `can_tx [can_msgs/Frame]`: publishes commands intended for the vehicle [CAN bus](https://en.wikipedia.org/wiki/CAN_bus).
+* `robot_status [cav_msgs/RobotEnabled]`: publishes the current status of automated vehicle control (10 Hz).
+* `ulc_report [dataspeed_ulc_msgs/UlcReport]`: publishes feedback data from the ULC (5 Hz).
+* `discovery`: publishes the CARMA [DriverStatus](https://github.com/usdot-fhwa-stol/carma-msgs/blob/develop/cav_msgs/msg/DriverStatus.msg) message (1.25 Hz).
+
+#### Subscribed Topics
+* `can_rx [can_msgs/Frame]`: receives CAN messages read from the vehicle [CAN bus](https://en.wikipedia.org/wiki/CAN_bus).
+* `ulc_cmd [dataspeed_ulc_msgs/UlcCmd]`: receives input commands intended for the ULC. In addition to the speed and steering command inputs, this topic also configures the behavior of the ULC. It allows the user to turn the speed and steering components of the ULC on and off, switch shifting and steering modes, and configure longitudinal and lateral acceleration limits.
+* `cmd_vel (geometry_msgs/Twist)`: receives simplified commands intended for the ULC. When this topic is used to command the ULC, the speed component of the ULC is activated and tracks the `linear.x` field of the `geometry_msgs/Twist` message, assuming the units are `m/s`; the steering component of the ULC is activated in yaw rate mode and tracks the `angular.z` field of the `geometry_msgs/Twist` message, assuming the units are `rad/s`; and all longitudinal and lateral acceleration limits use the default settings outlined in the [ULC User's Guide](https://bitbucket.org/DataspeedInc/dataspeed_ulc_ros/downloads/ULC_UserGuide-RevA04.pdf).
+* `cmd_vel_stamped (geometry_msgs/TwistStamped)`: receives simplified commands intended for the ULC and ignores the header of the incoming message, acting similar to the `cmd_vel` topic.
+* `dbw_enabled [std_msgs/Bool]`: receives the status (enabled/disabled) of the Drive-by-Wire system.
+* `vehicle_cmd [autoware_msgs/VehicleCmd]`: receives Autoware commands intended for the ULC. This can either be a control command (desired speed and steering wheel angle) or a twist command (desired speed and yaw rate).
 
 #### Services
-* ``
+N/A
 
 #### Parameters
-* ``: .
-* `parameter`: .
+N/A
 
 Examples
 --------
 
-See the `ulc.launch` file in the `dataspeed_ulc_can/launch` directory that is used to launch the Drive-by-Wire Kit.
+See the `ulc.launch` file in the `dataspeed_ulc_can/launch` directory that is used to launch the ULC.
 
 Original Dataspeed Universal Lat/Lon Controller Interface Documentation
 =======================================================================
