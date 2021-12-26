@@ -1,7 +1,7 @@
 Dataspeed Universal Lat/Lon Controller Driver for CARMA
 =======================================================
 
-This is a fork of the [dataspeed_ulc_ros](https://bitbucket.org/DataspeedInc/dataspeed_ulc_ros/src/master/) package that is used to communicate with the Universal Lat/Lon Controller (ULC) feature of the [Dataspeed Drive-by-Wire Kit](https://www.dataspeedinc.com/adas-by-wire-system/) for Lincoln MKZ / Ford Fusion vehicles. This fork has been modified to allow for building a Docker image that can serve as a controller driver for the [CARMA Platform](https://github.com/usdot-fhwa-stol/carma-platform).
+This is a fork of the [dataspeed_ulc_ros](https://bitbucket.org/DataspeedInc/dataspeed_ulc_ros/src/master/) package that is used to communicate with the Universal Lat/Lon Controller (ULC) feature of the [Dataspeed Drive-by-Wire Kit](https://www.dataspeedinc.com/adas-by-wire-system/) for Lincoln MKZ / Ford Fusion vehicles. It may also work for other vehicles compatible with the [Dataspeed Drive-by-Wire Kit](https://www.dataspeedinc.com/adas-by-wire-system/), though this is not guaranteed. This fork has been modified to allow for building a Docker image that can serve as a controller driver for the [CARMA Platform](https://github.com/usdot-fhwa-stol/carma-platform).
 
 Ubuntu 20.04 Installation
 -------------------------
