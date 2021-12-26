@@ -1,7 +1,7 @@
 # dataspeed_ulc_can
  
 ## ulc_node
-This node allows ROS users to command the Universal Lat/Lon Controller (ULC) using ROS messages instead of having to manually construct and populate CAN messages. The node subscribes to three different command topics that alter the behavior of the node. It is recommended to make sure that only one command topic is being used at a given time.
+This node allows ROS users to command the Universal Lat/Lon Controller (ULC) using ROS messages instead of having to manually construct and populate CAN messages. The node subscribes to three different command topics that alter the behavior of the node. It is recommended to make sure that only one command topic is being used at any given time.
 
 ### Subscribed Topics
 #### ulc_cmd ([dataspeed_ulc_msgs/UlcCmd](../dataspeed_ulc_msgs/msg/UlcCmd.msg))
