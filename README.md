@@ -50,7 +50,7 @@ ROS API
 * `can_tx [can_msgs/Frame]`: publishes commands intended for the vehicle [CAN bus](https://en.wikipedia.org/wiki/CAN_bus).
 * `robot_status [cav_msgs/RobotEnabled]`: publishes the current status of automated vehicle control (10 Hz).
 * `ulc_report [dataspeed_ulc_msgs/UlcReport]`: publishes feedback data from the ULC (5 Hz).
-* `discovery`: publishes the CARMA [DriverStatus](https://github.com/usdot-fhwa-stol/carma-msgs/blob/develop/cav_msgs/msg/DriverStatus.msg) message (1.25 Hz).
+* `discovery [cav_msgs/DriverStatus]`: publishes the CARMA [DriverStatus](https://github.com/usdot-fhwa-stol/carma-msgs/blob/develop/cav_msgs/msg/DriverStatus.msg) message (1.25 Hz).
 
 #### Subscribed Topics
 * `can_rx [can_msgs/Frame]`: receives CAN messages read from the vehicle [CAN bus](https://en.wikipedia.org/wiki/CAN_bus).
