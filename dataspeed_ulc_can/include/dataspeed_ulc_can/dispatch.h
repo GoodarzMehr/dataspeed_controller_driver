@@ -50,6 +50,7 @@ typedef struct {
   uint8_t enable_shifting  :1;
   uint8_t enable_steering  :1;
   uint8_t enable_pedals    :1;
+  uint8_t clear            :1;
   uint8_t pedals_mode      :1;  // 0 = speed mode, 1 = accel mode
   uint8_t coast_decel      :1;
 
