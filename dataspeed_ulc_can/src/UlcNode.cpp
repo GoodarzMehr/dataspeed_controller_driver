@@ -69,8 +69,16 @@ static T overflowSaturation(double input, T limit_min, T limit_max, double scale
 static inline bool validInputs(const dataspeed_ulc_msgs::UlcCmd& cmd)
 {
   bool valid = true;
-  if (std::isnan(cmd.linear_velocity)) {
+  if (std::isnan(cmd.linear_velocity) && cmd.pedals_mode == dataspeed_ulc_msgs::UlcCmd::SPEED_MODE) {
     ROS_WARN("NaN input detected on speed input");
+    valid = false;
+  }
+  if (std::isnan(cmd.accel_cmd) && cmd.pedals_mode == dataspeed_ulc_msgs::UlcCmd::ACCEL_MODE) {
+    ROS_WARN("NaN input detected on speed input");
+    valid = false;
+  }
+    if (cmd.pedals_mode != dataspeed_ulc_msgs::UlcCmd::SPEED_MODE && cmd.pedals_mode != dataspeed_ulc_msgs::UlcCmd::ACCEL_MODE) {
+    ROS_WARN("Invalid pedals mode in command message");
     valid = false;
   }
   if (std::isnan(cmd.yaw_command)) {
@@ -93,11 +101,34 @@ static inline bool validInputs(const dataspeed_ulc_msgs::UlcCmd& cmd)
     ROS_WARN("NaN input detected on angular accel input");
     valid = false;
   }
+  if (std::isnan(cmd.jerk_limit_throttle)) {
+    ROS_WARN("NaN input detected on throttle jerk input");
+    valid = false;
+  }
+  if (std::isnan(cmd.jerk_limit_brake)) {
+    ROS_WARN("NaN input detected on brake jerk input");
+    valid = false;
+  }
   return valid;
 }
 
+// Last firmware versions before new ULC interface.
+PlatformMap OLD_ULC_FIRMWARE({
+  {PlatformVersion(P_FCA_RU,      M_STEER, ModuleVersion(1,5,2))},
+  {PlatformVersion(P_FCA_WK2,     M_STEER, ModuleVersion(1,3,2))},
+  {PlatformVersion(P_FORD_C1,     M_STEER, ModuleVersion(1,2,2))},
+  {PlatformVersion(P_FORD_CD4,    M_STEER, ModuleVersion(2,5,2))},
+  {PlatformVersion(P_FORD_CD5,    M_STEER, ModuleVersion(1,1,2))},
+  {PlatformVersion(P_FORD_GE1,    M_STEER, ModuleVersion(0,1,0))},
+  {PlatformVersion(P_FORD_P5,     M_STEER, ModuleVersion(1,4,2))},
+  {PlatformVersion(P_FORD_T6,     M_STEER, ModuleVersion(0,2,2))},
+  {PlatformVersion(P_FORD_U6,     M_STEER, ModuleVersion(1,0,2))},
+  {PlatformVersion(P_POLARIS_GEM, M_STEER, ModuleVersion(1,1,1))},
+  {PlatformVersion(P_POLARIS_RZR, M_STEER, ModuleVersion(0,3,1))},
+});
+
 UlcNode::UlcNode(ros::NodeHandle &n, ros::NodeHandle &pn) :
-  enable_(false)
+  enable_(false), accel_mode_supported_(true)
 {
   // Setup publishers
   pub_report_ = n.advertise<dataspeed_ulc_msgs::UlcReport>("ulc_report", 2);
@@ -140,11 +171,13 @@ void UlcNode::recvEnable(const std_msgs::BoolConstPtr& msg)
 
 void UlcNode::recvUlcCmd(const dataspeed_ulc_msgs::UlcCmdConstPtr& msg)
 {
-  // Check for differences in acceleration limits
+  // Check for differences in acceleration and jerk limits
   bool diff = (msg->linear_accel  != ulc_cmd_.linear_accel)
            || (msg->linear_decel  != ulc_cmd_.linear_decel)
            || (msg->lateral_accel != ulc_cmd_.lateral_accel)
-           || (msg->angular_accel != ulc_cmd_.angular_accel);
+           || (msg->angular_accel != ulc_cmd_.angular_accel)
+           || (msg->jerk_limit_throttle != ulc_cmd_.jerk_limit_throttle)
+           || (msg->jerk_limit_brake != ulc_cmd_.jerk_limit_brake);
   ulc_cmd_ = *msg;
 
   // Publish command message
@@ -160,6 +193,8 @@ void UlcNode::recvTwistCmd(const geometry_msgs::Twist& msg)
 {
   // Populate command fields
   ulc_cmd_.linear_velocity = msg.linear.x;
+  ulc_cmd_.pedals_mode = dataspeed_ulc_msgs::UlcCmd::SPEED_MODE;
+  ulc_cmd_.coast_decel = false;
   ulc_cmd_.yaw_command = msg.angular.z;
   ulc_cmd_.steering_mode = dataspeed_ulc_msgs::UlcCmd::YAW_RATE_MODE;
 
@@ -173,6 +208,8 @@ void UlcNode::recvTwistCmd(const geometry_msgs::Twist& msg)
   ulc_cmd_.linear_decel = 0;
   ulc_cmd_.angular_accel = 0;
   ulc_cmd_.lateral_accel = 0;
+  ulc_cmd_.jerk_limit_throttle = 0;
+  ulc_cmd_.jerk_limit_brake = 0;
 
   // Publish command message
   sendCmdMsg(false);
@@ -234,25 +271,45 @@ void UlcNode::recvCan(const can_msgs::FrameConstPtr& msg)
           dataspeed_ulc_msgs::UlcReport report;
           report.header.stamp = msg->header.stamp;
           report.speed_ref = (float)ptr->speed_ref * 0.02f;
-          report.accel_ref = (float)ptr->accel_ref * 0.05f;
+          report.timeout = ptr->timeout;
+          report.pedals_enabled = ptr->pedals_enabled;
+          report.pedals_mode = ptr->pedals_mode;
           report.speed_meas = (float)ptr->speed_meas * 0.02f;
+          report.override_latched = ptr->override;
+          report.steering_enabled = ptr->steering_enabled;
+          report.steering_mode = ptr->steering_mode;
+          report.accel_ref = (float)ptr->accel_ref * 0.05f;
           current_speed_ = report.speed_meas;
           report.accel_meas = (float)ptr->accel_meas * 0.05f;
           report.max_steering_angle = (float)ptr->max_steering_angle * 5.0f;
+          report.coasting = ptr->coasting;
           report.max_steering_vel = (float)ptr->max_steering_vel * 8.0f;
-          report.pedals_enabled = ptr->pedals_enabled;
-          report.steering_enabled = ptr->steering_enabled;
-          report.tracking_mode = ptr->tracking_mode;
-          report.speed_preempted = ptr->speed_preempted;
           report.steering_preempted = ptr->steering_preempted;
-          report.override_latched = ptr->override;
-          report.steering_mode = ptr->steering_mode;
-          report.timeout = ptr->timeout;
+          report.speed_preempted = ptr->speed_preempted;
           pub_report_.publish(report);
           if (report.pedals_enabled && report.steering_enabled && !report.override_latched) {
             active_ = true;
           } else {
             active_ = false;
+          }
+        }
+        break;
+      case ID_VERSION:
+        if (msg->dlc >= sizeof(MsgVersion)) {
+          const MsgVersion *ptr = (const MsgVersion*)msg->data.elems;
+          if ((Module)ptr->module == M_STEER) {
+            const PlatformVersion version((Platform)ptr->platform, (Module)ptr->module, ptr->major, ptr->minor, ptr->build);
+            const ModuleVersion old_ulc_version = OLD_ULC_FIRMWARE.findModule(version);
+            const char * str_p = platformToString(version.p);
+            const char * str_m = moduleToString(version.m);
+            if (firmware_.findModule(version) != version.v) {
+              firmware_.insert(version);
+              if (version <= old_ulc_version) {
+                accel_mode_supported_ = false;
+                ROS_WARN("Firmware %s %s  version %u.%u.%u does not support ULC acceleration interface mode.", str_p, str_m,
+                        version.v.major(), version.v.minor(), version.v.build());
+              }
+            }
           }
         }
         break;
@@ -305,8 +362,25 @@ void UlcNode::sendCmdMsg(bool cfg)
 
   // Populate command fields
   ptr->clear = ulc_cmd_.clear;
-  ptr->linear_velocity = overflowSaturation(ulc_cmd_.linear_velocity, INT16_MIN, INT16_MAX, 0.0025, "ULC command speed", "m/s");
+  ptr->pedals_mode = ulc_cmd_.pedals_mode;
+  ptr->coast_decel = ulc_cmd_.coast_decel;
   ptr->steering_mode = ulc_cmd_.steering_mode;
+  if (ulc_cmd_.pedals_mode == dataspeed_ulc_msgs::UlcCmd::SPEED_MODE) {
+    ptr->lon_command =
+        overflowSaturation(ulc_cmd_.linear_velocity, INT16_MIN, INT16_MAX, 0.0025, "ULC command speed", "m/s");
+  } else if (ulc_cmd_.pedals_mode == dataspeed_ulc_msgs::UlcCmd::ACCEL_MODE) {
+    if (!accel_mode_supported_) {
+      ROS_WARN_THROTTLE(1.0, "Firmware does not support acceleration mode interface");
+      return;
+    }
+    ptr->lon_command =
+        overflowSaturation(ulc_cmd_.accel_cmd, INT16_MIN, INT16_MAX, 5e-4, "ULC command accel", "m/s^2");
+  } else {
+    ptr->lon_command = 0;
+    ROS_WARN_THROTTLE(1.0, "Unsupported ULC pedal control mode [%d]", ulc_cmd_.pedals_mode);
+    cmd_stamp_ = ros::Time(0);
+    return;
+  }
   if (ulc_cmd_.steering_mode == dataspeed_ulc_msgs::UlcCmd::YAW_RATE_MODE) {
     ptr->yaw_command = overflowSaturation(ulc_cmd_.yaw_command, INT16_MIN, INT16_MAX, 0.00025, "ULC yaw rate command", "rad/s");
   } else if (ulc_cmd_.steering_mode == dataspeed_ulc_msgs::UlcCmd::CURVATURE_MODE) {
@@ -333,11 +407,13 @@ void UlcNode::sendCfgMsg()
   MsgUlcCfg *ptr = (MsgUlcCfg *)msg.data.elems;
   memset(ptr, 0x00, sizeof(*ptr));
 
-  // Populate acceleration limits
+  // Populate acceleration and jerk limits
   ptr->linear_accel  = overflowSaturation(ulc_cmd_.linear_accel,  0, UINT8_MAX, 0.025, "Linear accel limit",  "m/s^2");
   ptr->linear_decel  = overflowSaturation(ulc_cmd_.linear_decel,  0, UINT8_MAX, 0.025, "Linear decel limit",  "m/s^2");
   ptr->lateral_accel = overflowSaturation(ulc_cmd_.lateral_accel, 0, UINT8_MAX, 0.05, "Lateral accel limit", "m/s^2");
   ptr->angular_accel = overflowSaturation(ulc_cmd_.angular_accel, 0, UINT8_MAX, 0.02, "Angular accel limit", "rad/s^2");
+  ptr->jerk_limit_throttle = overflowSaturation(ulc_cmd_.jerk_limit_throttle, 0, UINT8_MAX, 0.1, "Throttle jerk limit", "m/s^3");
+  ptr->jerk_limit_brake = overflowSaturation(ulc_cmd_.jerk_limit_brake, 0, UINT8_MAX, 0.1, "Brake jerk limit", "m/s^3");
 
   // Publish message
   pub_can_.publish(msg);

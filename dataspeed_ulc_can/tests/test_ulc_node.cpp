@@ -22,6 +22,7 @@ double g_cfg_freq;
 
 // Command message scale factors
 const double LIN_VEL_SCALE_FACTOR = 0.0025;
+const double ACCEL_CMD_SCALE_FACTOR = 0.0005;
 const double YAW_RATE_SCALE_FACTOR = 0.00025;
 const double CURVATURE_SCALE_FACTOR = 0.0000061;
 
@@ -30,6 +31,8 @@ const double LINEAR_ACCEL_SCALE_FACTOR = 0.025;
 const double LINEAR_DECEL_SCALE_FACTOR = 0.025;
 const double LATERAL_ACCEL_SCALE_FACTOR = 0.05;
 const double ANGULAR_ACCEL_SCALE_FACTOR = 0.02;
+const double JERK_LIMIT_THROTTLE_SCALE_FACTOR = 0.1;
+const double JERK_LIMIT_BRAKE_SCALE_FACTOR = 0.1;
 
 // Report message scale factors
 const double SPEED_REPORT_SCALE_FACTOR = 0.02;
@@ -122,6 +125,8 @@ TEST(ULCNode, cfgTiming)
   g_ulc_cmd = dataspeed_ulc_msgs::UlcCmd();
   g_ulc_cmd.linear_accel = 1.0;
   g_ulc_cmd.linear_decel = 1.0;
+  g_ulc_cmd.jerk_limit_throttle = 10.0;
+  g_ulc_cmd.jerk_limit_brake = 10.0;
   g_ulc_cmd.lateral_accel = 1.0;
   g_ulc_cmd.angular_accel = 1.0;
 
@@ -145,10 +150,14 @@ TEST(ULCNode, cfgTiming)
   }
   EXPECT_GE(count, 1);
 
-  // Change accel limits and make sure config CAN messages are sent immediately
+  // Change accel/jerk limits and make sure config CAN messages are sent immediately
   g_ulc_cmd.linear_accel = 2.0;
   checkImmediateCfg();
   g_ulc_cmd.linear_decel = 2.0;
+  checkImmediateCfg();
+  g_ulc_cmd.jerk_limit_throttle = 5.0;
+  checkImmediateCfg();
+  g_ulc_cmd.jerk_limit_brake = 5.0;
   checkImmediateCfg();
   g_ulc_cmd.lateral_accel = 2.0;
   checkImmediateCfg();
@@ -164,8 +173,13 @@ TEST(ULCNode, cmdRangeSaturation)
   g_ulc_cmd.enable_pedals = true;
   g_ulc_cmd.enable_steering = true;
   g_ulc_cmd.linear_velocity = (INT16_MIN * LIN_VEL_SCALE_FACTOR) - 1.0;
+  g_ulc_cmd.accel_cmd = 0.0;
+  g_ulc_cmd.pedals_mode = dataspeed_ulc_msgs::UlcCmd::SPEED_MODE;
+  g_ulc_cmd.coast_decel = 0;
   g_ulc_cmd.linear_accel = -1.0;
   g_ulc_cmd.linear_decel = -1.0;
+  g_ulc_cmd.jerk_limit_throttle = -1.0;
+  g_ulc_cmd.jerk_limit_brake = -1.0;
   g_ulc_cmd.lateral_accel = -1.0;
   g_ulc_cmd.angular_accel = -1.0;
 
@@ -177,10 +191,12 @@ TEST(ULCNode, cmdRangeSaturation)
   g_pub_ulc_cmd.publish(g_ulc_cmd);
   ASSERT_TRUE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cmd));
   ASSERT_TRUE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cfg));
-  EXPECT_EQ(INT16_MIN, g_msg_ulc_cmd.get().linear_velocity);
+  EXPECT_EQ(INT16_MIN, g_msg_ulc_cmd.get().lon_command);
   EXPECT_EQ(INT16_MIN, g_msg_ulc_cmd.get().yaw_command);
   EXPECT_EQ(0, g_msg_ulc_cfg.get().linear_accel);
   EXPECT_EQ(0, g_msg_ulc_cfg.get().linear_decel);
+  EXPECT_EQ(0, g_msg_ulc_cfg.get().jerk_limit_throttle);
+  EXPECT_EQ(0, g_msg_ulc_cfg.get().jerk_limit_brake);
   EXPECT_EQ(0, g_msg_ulc_cfg.get().lateral_accel);
   EXPECT_EQ(0, g_msg_ulc_cfg.get().angular_accel);
 
@@ -198,8 +214,12 @@ TEST(ULCNode, cmdRangeSaturation)
   g_ulc_cmd.enable_pedals = true;
   g_ulc_cmd.enable_steering = true;
   g_ulc_cmd.linear_velocity = (INT16_MAX * LIN_VEL_SCALE_FACTOR) + 1.0;
+  g_ulc_cmd.pedals_mode = dataspeed_ulc_msgs::UlcCmd::SPEED_MODE;
+  g_ulc_cmd.coast_decel = 0;
   g_ulc_cmd.linear_accel = 100.0;
   g_ulc_cmd.linear_decel = 100.0;
+  g_ulc_cmd.jerk_limit_throttle = 100.0;
+  g_ulc_cmd.jerk_limit_brake = 100.0;
   g_ulc_cmd.lateral_accel = 100.0;
   g_ulc_cmd.angular_accel = 100.0;
 
@@ -211,10 +231,12 @@ TEST(ULCNode, cmdRangeSaturation)
   g_pub_ulc_cmd.publish(g_ulc_cmd);
   ASSERT_TRUE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cmd));
   ASSERT_TRUE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cfg));
-  EXPECT_EQ(INT16_MAX, g_msg_ulc_cmd.get().linear_velocity);
+  EXPECT_EQ(INT16_MAX, g_msg_ulc_cmd.get().lon_command);
   EXPECT_EQ(INT16_MAX, g_msg_ulc_cmd.get().yaw_command);
   EXPECT_EQ(UINT8_MAX, g_msg_ulc_cfg.get().linear_accel);
   EXPECT_EQ(UINT8_MAX, g_msg_ulc_cfg.get().linear_decel);
+  EXPECT_EQ(UINT8_MAX, g_msg_ulc_cfg.get().jerk_limit_throttle);
+  EXPECT_EQ(UINT8_MAX, g_msg_ulc_cfg.get().jerk_limit_brake);
   EXPECT_EQ(UINT8_MAX, g_msg_ulc_cfg.get().lateral_accel);
   EXPECT_EQ(UINT8_MAX, g_msg_ulc_cfg.get().angular_accel);
 
@@ -232,8 +254,11 @@ TEST(ULCNode, cmdRangeSaturation)
   g_ulc_cmd.enable_pedals = true;
   g_ulc_cmd.enable_steering = true;
   g_ulc_cmd.linear_velocity = INFINITY;
+  g_ulc_cmd.accel_cmd = INFINITY;
   g_ulc_cmd.linear_accel = INFINITY;
   g_ulc_cmd.linear_decel = INFINITY;
+  g_ulc_cmd.jerk_limit_throttle = INFINITY;
+  g_ulc_cmd.jerk_limit_brake = INFINITY;
   g_ulc_cmd.lateral_accel = INFINITY;
   g_ulc_cmd.angular_accel = INFINITY;
 
@@ -245,10 +270,12 @@ TEST(ULCNode, cmdRangeSaturation)
   g_pub_ulc_cmd.publish(g_ulc_cmd);
   ASSERT_TRUE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cmd));
   ASSERT_TRUE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cfg));
-  EXPECT_EQ(INT16_MAX, g_msg_ulc_cmd.get().linear_velocity);
+  EXPECT_EQ(INT16_MAX, g_msg_ulc_cmd.get().lon_command);
   EXPECT_EQ(INT16_MAX, g_msg_ulc_cmd.get().yaw_command);
   EXPECT_EQ(UINT8_MAX, g_msg_ulc_cfg.get().linear_accel);
   EXPECT_EQ(UINT8_MAX, g_msg_ulc_cfg.get().linear_decel);
+  EXPECT_EQ(UINT8_MAX, g_msg_ulc_cfg.get().jerk_limit_throttle);
+  EXPECT_EQ(UINT8_MAX, g_msg_ulc_cfg.get().jerk_limit_brake);
   EXPECT_EQ(UINT8_MAX, g_msg_ulc_cfg.get().lateral_accel);
   EXPECT_EQ(UINT8_MAX, g_msg_ulc_cfg.get().angular_accel);
 
@@ -265,9 +292,14 @@ TEST(ULCNode, cmdRangeSaturation)
   /*** -Inf tests ***********************************************************/
   g_ulc_cmd.enable_pedals = true;
   g_ulc_cmd.enable_steering = true;
+  g_ulc_cmd.linear_accel = -INFINITY;
   g_ulc_cmd.linear_velocity = -INFINITY;
+  g_ulc_cmd.accel_cmd = 0.0;
   g_ulc_cmd.linear_accel = -INFINITY;
   g_ulc_cmd.linear_decel = -INFINITY;
+  g_ulc_cmd.pedals_mode = dataspeed_ulc_msgs::UlcCmd::SPEED_MODE;
+  g_ulc_cmd.jerk_limit_throttle = -INFINITY;
+  g_ulc_cmd.jerk_limit_brake = -INFINITY;
   g_ulc_cmd.lateral_accel = -INFINITY;
   g_ulc_cmd.angular_accel = -INFINITY;
 
@@ -279,10 +311,12 @@ TEST(ULCNode, cmdRangeSaturation)
   g_pub_ulc_cmd.publish(g_ulc_cmd);
   ASSERT_TRUE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cmd));
   ASSERT_TRUE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cfg));
-  EXPECT_EQ(INT16_MIN, g_msg_ulc_cmd.get().linear_velocity);
+  EXPECT_EQ(INT16_MIN, g_msg_ulc_cmd.get().lon_command);
   EXPECT_EQ(INT16_MIN, g_msg_ulc_cmd.get().yaw_command);
   EXPECT_EQ(0, g_msg_ulc_cfg.get().linear_accel);
   EXPECT_EQ(0, g_msg_ulc_cfg.get().linear_decel);
+  EXPECT_EQ(0, g_msg_ulc_cfg.get().jerk_limit_throttle);
+  EXPECT_EQ(0, g_msg_ulc_cfg.get().jerk_limit_brake);
   EXPECT_EQ(0, g_msg_ulc_cfg.get().lateral_accel);
   EXPECT_EQ(0, g_msg_ulc_cfg.get().angular_accel);
 
@@ -301,9 +335,19 @@ TEST(ULCNode, outOfBoundsInputs)
 {
   g_msg_ulc_cfg.clear();
 
-  // NaN in linear velocity field
+  // NaN in longitudinal command fields
   g_ulc_cmd = dataspeed_ulc_msgs::UlcCmd();
   g_ulc_cmd.linear_velocity = NAN;
+  g_ulc_cmd.accel_cmd = 0.0;
+  g_ulc_cmd.pedals_mode = dataspeed_ulc_msgs::UlcCmd::SPEED_MODE;
+  g_msg_ulc_cmd.clear();
+  g_pub_ulc_cmd.publish(g_ulc_cmd);
+  EXPECT_FALSE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cmd));
+
+  g_ulc_cmd = dataspeed_ulc_msgs::UlcCmd();
+  g_ulc_cmd.linear_velocity = 0.0;
+  g_ulc_cmd.accel_cmd = NAN;
+  g_ulc_cmd.pedals_mode = dataspeed_ulc_msgs::UlcCmd::ACCEL_MODE;
   g_msg_ulc_cmd.clear();
   g_pub_ulc_cmd.publish(g_ulc_cmd);
   EXPECT_FALSE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cmd));
@@ -329,6 +373,20 @@ TEST(ULCNode, outOfBoundsInputs)
   g_pub_ulc_cmd.publish(g_ulc_cmd);
   EXPECT_FALSE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cmd));
 
+  // NaN in throttle jerk limit field
+  g_ulc_cmd = dataspeed_ulc_msgs::UlcCmd();
+  g_ulc_cmd.jerk_limit_throttle = NAN;
+  g_msg_ulc_cmd.clear();
+  g_pub_ulc_cmd.publish(g_ulc_cmd);
+  EXPECT_FALSE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cmd));
+
+  // NaN in brake jerk limit field
+  g_ulc_cmd = dataspeed_ulc_msgs::UlcCmd();
+  g_ulc_cmd.jerk_limit_brake = NAN;
+  g_msg_ulc_cmd.clear();
+  g_pub_ulc_cmd.publish(g_ulc_cmd);
+  EXPECT_FALSE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cmd));
+
   // NaN in lateral accel field
   g_ulc_cmd = dataspeed_ulc_msgs::UlcCmd();
   g_ulc_cmd.lateral_accel = NAN;
@@ -350,6 +408,13 @@ TEST(ULCNode, outOfBoundsInputs)
   g_pub_ulc_cmd.publish(g_ulc_cmd);
   EXPECT_FALSE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cmd));
 
+  // Invalid pedals mode
+  g_ulc_cmd = dataspeed_ulc_msgs::UlcCmd();
+  g_ulc_cmd.pedals_mode = 3;
+  g_msg_ulc_cmd.clear();
+  g_pub_ulc_cmd.publish(g_ulc_cmd);
+  EXPECT_FALSE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cmd));
+
   // Make sure no config messages were sent during this process
   EXPECT_FALSE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cfg));
 }
@@ -357,26 +422,46 @@ TEST(ULCNode, outOfBoundsInputs)
 TEST(ULCNode, scaleFactors)
 {
   g_ulc_cmd = dataspeed_ulc_msgs::UlcCmd();
-  g_ulc_cmd.linear_velocity = 22.3;
   g_ulc_cmd.linear_accel = 1.23;
   g_ulc_cmd.linear_decel = 3.45;
+  g_ulc_cmd.jerk_limit_throttle = 7.89;
+  g_ulc_cmd.jerk_limit_brake = 10.10;
   g_ulc_cmd.lateral_accel = 5.43;
   g_ulc_cmd.angular_accel = 3.21;
 
-  // Yaw rate steering
-  g_ulc_cmd.yaw_command = 0.567;
-  g_ulc_cmd.steering_mode = dataspeed_ulc_msgs::UlcCmd::YAW_RATE_MODE;
+  // Speed mode
+  g_ulc_cmd.linear_velocity = 22.3;
+  g_ulc_cmd.accel_cmd = 0.0;
+  g_ulc_cmd.pedals_mode = dataspeed_ulc_msgs::UlcCmd::SPEED_MODE;
   g_msg_ulc_cmd.clear();
   g_msg_ulc_cfg.clear();
   g_pub_ulc_cmd.publish(g_ulc_cmd);
   ASSERT_TRUE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cmd));
   ASSERT_TRUE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cfg));
-  EXPECT_EQ((int16_t)(g_ulc_cmd.linear_velocity / LIN_VEL_SCALE_FACTOR), g_msg_ulc_cmd.get().linear_velocity);
-  EXPECT_EQ((int16_t)(g_ulc_cmd.yaw_command / YAW_RATE_SCALE_FACTOR), g_msg_ulc_cmd.get().yaw_command);
+  EXPECT_EQ((int16_t)(g_ulc_cmd.linear_velocity / LIN_VEL_SCALE_FACTOR), g_msg_ulc_cmd.get().lon_command);
   EXPECT_EQ((int16_t)(g_ulc_cmd.linear_accel / LINEAR_ACCEL_SCALE_FACTOR), g_msg_ulc_cfg.get().linear_accel);
   EXPECT_EQ((int16_t)(g_ulc_cmd.linear_decel / LINEAR_DECEL_SCALE_FACTOR), g_msg_ulc_cfg.get().linear_decel);
+  EXPECT_EQ((int16_t)(g_ulc_cmd.jerk_limit_throttle / JERK_LIMIT_THROTTLE_SCALE_FACTOR), g_msg_ulc_cfg.get().jerk_limit_throttle);
+  EXPECT_EQ((int16_t)(g_ulc_cmd.jerk_limit_brake / JERK_LIMIT_BRAKE_SCALE_FACTOR), g_msg_ulc_cfg.get().jerk_limit_brake);
   EXPECT_EQ((int16_t)(g_ulc_cmd.lateral_accel / LATERAL_ACCEL_SCALE_FACTOR), g_msg_ulc_cfg.get().lateral_accel);
   EXPECT_EQ((int16_t)(g_ulc_cmd.angular_accel / ANGULAR_ACCEL_SCALE_FACTOR), g_msg_ulc_cfg.get().angular_accel);
+
+  // Accel mode
+  g_ulc_cmd.linear_velocity = 0.0;
+  g_ulc_cmd.accel_cmd = 2.123;
+  g_ulc_cmd.pedals_mode = dataspeed_ulc_msgs::UlcCmd::ACCEL_MODE;
+  g_msg_ulc_cmd.clear();
+  g_pub_ulc_cmd.publish(g_ulc_cmd);
+  ASSERT_TRUE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cmd));
+  EXPECT_EQ((int16_t)(g_ulc_cmd.accel_cmd / ACCEL_CMD_SCALE_FACTOR), g_msg_ulc_cmd.get().lon_command);
+
+  // Yaw rate steering
+  g_ulc_cmd.yaw_command = 0.567;
+  g_ulc_cmd.steering_mode = dataspeed_ulc_msgs::UlcCmd::YAW_RATE_MODE;
+  g_msg_ulc_cmd.clear();
+  g_pub_ulc_cmd.publish(g_ulc_cmd);
+  ASSERT_TRUE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cmd));
+  EXPECT_EQ((int16_t)(g_ulc_cmd.yaw_command / YAW_RATE_SCALE_FACTOR), g_msg_ulc_cmd.get().yaw_command);
 
   // Curvature steering
   g_ulc_cmd.yaw_command = 0.0789;
@@ -445,7 +530,7 @@ TEST(ULCNode, twistInputs)
   g_pub_twist.publish(twist_cmd);
   ASSERT_TRUE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cmd));
   EXPECT_FALSE(waitForMsg(ros::WallDuration(0.5), g_msg_ulc_cfg));
-  EXPECT_EQ((int16_t)(twist_cmd.linear.x / LIN_VEL_SCALE_FACTOR), g_msg_ulc_cmd.get().linear_velocity);
+  EXPECT_EQ((int16_t)(twist_cmd.linear.x / LIN_VEL_SCALE_FACTOR), g_msg_ulc_cmd.get().lon_command);
   EXPECT_EQ((int16_t)(twist_cmd.angular.z / YAW_RATE_SCALE_FACTOR), g_msg_ulc_cmd.get().yaw_command);
   EXPECT_EQ(0, g_msg_ulc_cmd.get().steering_mode);
 
@@ -456,7 +541,7 @@ TEST(ULCNode, twistInputs)
   g_pub_twist_stamped.publish(twist_stamped_cmd);
   ASSERT_TRUE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_cmd));
   EXPECT_FALSE(waitForMsg(ros::WallDuration(0.5), g_msg_ulc_cfg));
-  EXPECT_EQ((int16_t)(twist_cmd.linear.x / LIN_VEL_SCALE_FACTOR), g_msg_ulc_cmd.get().linear_velocity);
+  EXPECT_EQ((int16_t)(twist_cmd.linear.x / LIN_VEL_SCALE_FACTOR), g_msg_ulc_cmd.get().lon_command);
   EXPECT_EQ((int16_t)(twist_cmd.angular.z / YAW_RATE_SCALE_FACTOR), g_msg_ulc_cmd.get().yaw_command);
   EXPECT_EQ(0, g_msg_ulc_cmd.get().steering_mode);
 }
@@ -470,7 +555,8 @@ TEST(ULCNode, reportParsing)
   MsgUlcReport* msg_report_ptr = (MsgUlcReport*)report_out.data.elems;
   memset(msg_report_ptr, 0x00, sizeof(MsgUlcReport));
   msg_report_ptr->timeout = false;
-  msg_report_ptr->tracking_mode = 0;
+  msg_report_ptr->pedals_mode = 0;
+  msg_report_ptr->coasting = 0;
   msg_report_ptr->steering_mode = 1;
   msg_report_ptr->steering_enabled = false;
   msg_report_ptr->pedals_enabled = true;
@@ -487,7 +573,8 @@ TEST(ULCNode, reportParsing)
   g_pub_can.publish(report_out);
   ASSERT_TRUE(waitForMsg(ros::WallDuration(0.1), g_msg_ulc_report));
   ASSERT_FALSE(g_msg_ulc_report.get().timeout);
-  ASSERT_EQ(0, g_msg_ulc_report.get().tracking_mode);
+  ASSERT_EQ(0, g_msg_ulc_report.get().pedals_mode);
+  ASSERT_EQ(0, g_msg_ulc_report.get().coasting);
   ASSERT_EQ(1, g_msg_ulc_report.get().steering_mode);
   ASSERT_FALSE(g_msg_ulc_report.get().steering_enabled);
   ASSERT_TRUE(g_msg_ulc_report.get().pedals_enabled);
